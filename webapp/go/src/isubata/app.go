@@ -668,11 +668,11 @@ func postProfile(c echo.Context) error {
 		// if err != nil {
 		// 	return err
 		// }
-		// _, err = db.Exec("UPDATE user SET avatar_icon = ? WHERE id = ?", avatarName, self.ID)
-		// if err != nil {
-		// 	return err
-		// }
 		ioutil.WriteFile("/home/isucon/isubata/webapp/public/icons/"+avatarName, avatarData, 0644)
+		_, err = db.Exec("UPDATE user SET avatar_icon = ? WHERE id = ?", avatarName, self.ID)
+		if err != nil {
+			return err
+		}
 	}
 
 	if name := c.FormValue("display_name"); name != "" {
