@@ -112,7 +112,14 @@ func addMessage(channelID, userID int64, content string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	resID, resErr := res.LastInsertId()
+	res, err = db.Exec(
+		"UPDATE channel SET message = message + 1 WHERE id = ?)",
+		resID)
+	if err != nil {
+		return 0, err
+	}
+	return resID, resErr
 }
 
 type Message struct {
@@ -209,6 +216,8 @@ func getInitialize(c echo.Context) error {
 	db.MustExec("DELETE FROM channel WHERE id > 10")
 	db.MustExec("DELETE FROM message WHERE id > 10000")
 	db.MustExec("DELETE FROM haveread")
+	db.MustExec("UPDATE channel JOIN (SELECT channel_id, COUNT(*) msg_count FROM message GROUP BY channel_id) tmp ON tmp.channel_id = channel.id SET message_count = msg_count")
+
 	return c.String(204, "")
 }
 
@@ -224,11 +233,12 @@ func getIndex(c echo.Context) error {
 }
 
 type ChannelInfo struct {
-	ID          int64     `db:"id"`
-	Name        string    `db:"name"`
-	Description string    `db:"description"`
-	UpdatedAt   time.Time `db:"updated_at"`
-	CreatedAt   time.Time `db:"created_at"`
+	ID           int64     `db:"id"`
+	Name         string    `db:"name"`
+	Description  string    `db:"description"`
+	UpdatedAt    time.Time `db:"updated_at"`
+	CreatedAt    time.Time `db:"created_at"`
+	MessageCount int       `db:"message_count"`
 }
 
 func getChannel(c echo.Context) error {
@@ -452,22 +462,42 @@ func fetchUnread(c echo.Context) error {
 
 	resp := []map[string]interface{}{}
 
-	for _, chID := range channels {
-		lastID, err := queryHaveRead(userID, chID)
+	type HaveRead struct {
+		ChannelID int64 `db:"channel_id"`
+		MessageID int64 `db:"message_id"`
+	}
+	haveReads := make(map[int64]int64)
+	{
+		query, args, err := sqlx.In(
+			"SELECT channel_id, message_id FROM haveread WHERE user_id = ? AND channel_id IN (?)",
+			userID, channels)
+		if err != nil {
+			return err
+		}
+		hs := []HaveRead{}
+		err = db.Select(&hs, query, args...)
 		if err != nil {
 			return err
 		}
 
-		var cnt int64
-		if lastID > 0 {
-			err = db.Get(&cnt,
-				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id",
-				chID, lastID)
-		} else {
-			err = db.Get(&cnt,
-				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
-				chID)
+		for _, h := range hs {
+			haveReads[h.ChannelID] = h.MessageID
 		}
+	}
+
+	noReadChannels := []int64{}
+	for _, chID := range channels {
+		lastID := haveReads[chID]
+
+		if lastID == 0 {
+			noReadChannels = append(noReadChannels, chID)
+			continue
+		}
+
+		var cnt int64
+		err = db.Get(&cnt,
+			"SELECT message_count as cnt FROM channel WHERE id = ?",
+			chID)
 		if err != nil {
 			return err
 		}
@@ -475,6 +505,27 @@ func fetchUnread(c echo.Context) error {
 			"channel_id": chID,
 			"unread":     cnt}
 		resp = append(resp, r)
+	}
+
+	if 0 < len(noReadChannels) {
+		query, args, err := sqlx.In(
+			"SELECT * as cnt FROM channel WHERE id IN (?)",
+			noReadChannels)
+		if err != nil {
+			return err
+		}
+
+		chans := []ChannelInfo{}
+		err = db.Select(&chans, query, args...)
+		if err != nil {
+			return err
+		}
+		for _, ch := range chans {
+			r := map[string]interface{}{
+				"channel_id": ch.ID,
+				"unread":     ch.MessageCount}
+			resp = append(resp, r)
+		}
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -504,7 +555,7 @@ func getHistory(c echo.Context) error {
 
 	const N = 20
 	var cnt int64
-	err = db.Get(&cnt, "SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?", chID)
+	err = db.Get(&cnt, "SELECT message_cnt as cnt FROM channel WHERE id = ?", chID)
 	if err != nil {
 		return err
 	}
@@ -613,6 +664,7 @@ func postAddChannel(c echo.Context) error {
 
 	res, err := db.Exec(
 		"INSERT INTO channel (name, description, updated_at, created_at) VALUES (?, ?, NOW(), NOW())",
+		"INSERT INTO channel_info (name, description, updated_at, created_at) VALUES (?, ?, NOW(), NOW())",
 		name, desc)
 	if err != nil {
 		return err
