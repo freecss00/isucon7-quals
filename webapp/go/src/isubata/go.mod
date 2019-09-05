@@ -12,8 +12,11 @@ require (
 	github.com/labstack/echo v3.2.3+incompatible
 	github.com/labstack/echo-contrib v0.0.0-20170921210119-4036746d4b33
 	github.com/labstack/gommon v0.0.0-20170925052817-57409ada9da0
+	github.com/lib/pq v1.2.0 // indirect
 	github.com/mattn/go-colorable v0.0.9
 	github.com/mattn/go-isatty v0.0.3
+	github.com/mattn/go-sqlite3 v1.11.0 // indirect
+	github.com/stretchr/testify v1.4.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasttemplate v0.0.0-20170224212429-dcecefd839c4
 	golang.org/x/crypto v0.0.0-20170930174604-9419663f5a44
