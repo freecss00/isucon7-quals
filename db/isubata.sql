@@ -20,7 +20,7 @@ CREATE TABLE channel (
   description MEDIUMTEXT,
   updated_at DATETIME NOT NULL,
   created_at DATETIME NOT NULL,
-  message_cnt INT NOT NULL DEFAULT 0
+  message_count INT NOT NULL DEFAULT 0
 ) Engine=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE message (
